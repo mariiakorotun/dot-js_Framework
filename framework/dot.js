@@ -1,101 +1,76 @@
 class Dot {
   constructor() {
     this.state = {};
+    this.components = {};
     this.routes = {};
-    this.rootElement = null;
-    this.rootComponent = null;
-    window.addEventListener('popstate', () => this.render());
+    this.template = '';
   }
 
-  // --- NEW: HTTP MODULE ---
-  async fetch(url, options = {}) {
-    try {
-      const response = await fetch(url, options);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      return await response.json();
-    } catch (e) {
-      console.error("Fetch error: ", e);
-      return null;
-    }
+  // Реєстрація компонентів для пошуку в шаблоні
+  component(name, func) {
+    this.components[name.toUpperCase()] = func;
   }
 
-  // --- NEW: PERFORMANCE (LAZY RENDERING) ---
-  // Renders only items currently visible in the viewport
-  lazy(items, renderItem) {
-    const container = this.el('div', { class: 'dot-lazy-container' });
-    
-    // We use a small internal state to track visibility
-    setTimeout(() => {
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const index = entry.target.dataset.index;
-            const content = this.createElement(renderItem(items[index], index));
-            entry.target.innerHTML = '';
-            entry.target.appendChild(content);
-            observer.unobserve(entry.target);
-          }
-        });
-      }, { rootMargin: '50px' });
-
-      document.querySelectorAll('.dot-lazy-placeholder').forEach(el => observer.observe(el));
-    }, 0);
-
-    return this.el('div', { class: 'lazy-list' }, 
-      ...items.map((_, i) => this.el('div', { 
-        class: 'dot-lazy-placeholder', 
-        'data-index': i,
-        style: 'min-height: 30px; border-bottom: 1px solid #eee'
-      }, 'Loading...'))
-    );
-  }
-
-  // --- CORE RENDERING ENGINE ---
-  el(tag, props = {}, ...children) {
-    return { tag, props, children: children.flat() };
-  }
-
-  createElement(node) {
-    if (typeof node === 'string' || typeof node === 'number') return document.createTextNode(node);
-    const element = document.createElement(node.tag);
-    Object.entries(node.props || {}).forEach(([name, value]) => {
-      if (name.startsWith('on')) {
-        element.addEventListener(name.toLowerCase().substring(2), value);
-      } else {
-        element.setAttribute(name, value);
-      }
-    });
-    node.children.forEach(child => {
-      if (child) element.appendChild(this.createElement(child));
-    });
-    return element;
-  }
-
-  initState(initialState) {
-    this.state = new Proxy(initialState, {
+  // Ініціалізація стану з Proxy
+  initState(initial) {
+    this.state = new Proxy(initial, {
       set: (target, key, value) => {
         target[key] = value;
-        this.render();
+        this.updateUI();
         return true;
       }
     });
     return this.state;
   }
 
-  route(path, component) { this.routes[path] = component; }
-  navigate(path) { window.history.pushState({}, '', path); this.render(); }
-
-  mount(selector, rootComponent) {
-    this.rootElement = document.querySelector(selector);
-    this.rootComponent = rootComponent;
-    this.render();
+  // Завантаження HTML-файлу як шаблону
+  async loadTemplate(url) {
+    const response = await fetch(url);
+    this.template = await response.text();
   }
 
-  render() {
-    const path = window.location.pathname;
-    const component = this.routes[path] || this.rootComponent;
-    this.rootElement.innerHTML = '';
-    this.rootElement.appendChild(this.createElement(component()));
+  // Основна функція парсингу
+  compile(htmlString) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlString, 'text/html');
+    
+    // Шукаємо кастомні компоненти (наприклад, <my-todo-list>)
+    Object.keys(this.components).forEach(tagName => {
+      const elements = doc.querySelectorAll(tagName);
+      elements.forEach(el => {
+        const componentHTML = this.components[tagName](this.state);
+        el.outerHTML = componentHTML;
+      });
+    });
+
+    return doc.body.innerHTML;
+  }
+
+  updateUI() {
+    const appContainer = document.querySelector('#app');
+    // Визначаємо, який шаблон рендерити (Routing)
+    const currentPath = window.location.pathname;
+    const view = this.routes[currentPath] || this.template;
+    
+    appContainer.innerHTML = this.compile(view);
+    this.bindEvents();
+  }
+
+  // Прив'язка подій після оновлення innerHTML
+  bindEvents() {
+    document.querySelectorAll('[on-click]').forEach(el => {
+      const action = el.getAttribute('on-click');
+      el.onclick = () => new Function('state', action)(this.state);
+    });
+  }
+
+  route(path, template) {
+    this.routes[path] = template;
+  }
+
+  mount(selector) {
+    window.addEventListener('popstate', () => this.updateUI());
+    this.updateUI();
   }
 }
 

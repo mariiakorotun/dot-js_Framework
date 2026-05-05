@@ -1,17 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>dot-js</title>
-    <style>
-        body { font-family: sans-serif; padding: 2rem; line-height: 1.5; }
-        .nav { margin-bottom: 20px; }
-        .nav button { margin-right: 10px; }
-        .card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; }
-    </style>
-</head>
-<body>
-    <div id="app"></div>
-    <script type="module" src="app.js"></script>
-</body>
-</html>
+<div id="app">
+  <header>
+    <h1>Welcome to dot-js</h1>
+    <nav>
+      <button on-click="location.pathname='/'; history.pushState({},'','/')">Home</button>
+      <button on-click="location.pathname='/about'; history.pushState({},'','/about')">About</button>
+    </nav>
+  </header>
+  <main>
+    <user-list></user-list>
+  </main>
+</div>
